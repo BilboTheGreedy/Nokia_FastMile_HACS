@@ -121,15 +121,30 @@ class NokiaFastMileAPI:
     def reboot_device(self) -> bool:
         """Reboot the Nokia FastMile device."""
         try:
-            url = f"{self.base_url}/reboot_web_app.cgi"
+            # Try the command endpoint first
+            url = f"{self.base_url}/command_web_app.cgi"
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            data = {"TODO_REBOOT": "1"}
+            data = {"action": "reboot"}
 
+            _LOGGER.debug("Sending reboot command to %s", url)
             response = self.session.post(url, data=data, headers=headers, timeout=10)
 
             # Check if request was accepted
-            if response.status_code in [200, 202, 204, 500]:
+            if response.status_code in [200, 202, 204]:
+                _LOGGER.info("Reboot command sent successfully via command endpoint")
                 return True
+
+            # Try alternative endpoint
+            _LOGGER.debug("First attempt got status %s, trying alternative method", response.status_code)
+            url = f"{self.base_url}/reboot_web_app.cgi"
+            data = {"Page": "REBOOT", "Action": "Reboot"}
+            response = self.session.post(url, data=data, headers=headers, timeout=10)
+
+            if response.status_code in [200, 202, 204, 500]:  # 500 might indicate device is rebooting
+                _LOGGER.info("Reboot command sent successfully via reboot endpoint")
+                return True
+
+            _LOGGER.error("Failed to send reboot command. Status code: %s", response.status_code)
             return False
         except requests.exceptions.RequestException as err:
             _LOGGER.error("Error sending reboot command: %s", err)

@@ -1,0 +1,60 @@
+# Internet Connection Monitoring and Nokia FastMile Auto-Reboot
+# This package monitors internet connectivity and automatically reboots
+# the Nokia FastMile receiver if connection is lost
+
+# Internet connection monitoring using command line
+command_line:
+  - binary_sensor:
+      name: Internet Connection
+      command: "ping -c 2 8.8.8.8 > /dev/null 2>&1 && echo ON || echo OFF"
+      payload_on: "ON"
+      payload_off: "OFF"
+      scan_interval: 30
+
+# Automations
+automation:
+  - alias: Nokia FastMile - Auto Reboot on Internet Down
+    description: Reboot Nokia receiver if internet connection is lost for 2 minutes
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.internet_connection
+        to: "off"
+        for:
+          minutes: 2
+    condition:
+      # Only reboot if last reboot was more than 1 hour ago
+      - condition: template
+        value_template: >
+          {{ (now() - state_attr('automation.nokia_fastmile_auto_reboot_on_internet_down', 'last_triggered') | default(now() - timedelta(hours=2), true)).total_seconds() > 3600 }}
+    action:
+      # Press the reboot button from the Nokia FastMile integration
+      - service: button.press
+        target:
+          entity_id: button.reboot
+      - service: persistent_notification.create
+        data:
+          title: "🔄 Nokia FastMile Rebooted"
+          message: >
+            Internet connection lost at {{ now().strftime('%Y-%m-%d %H:%M:%S') }}.
+            Nokia FastMile receiver has been rebooted automatically.
+      - service: logbook.log
+        data:
+          name: Nokia FastMile
+          message: "Automatic reboot triggered due to internet connection loss"
+    mode: single
+
+  - alias: Nokia FastMile - Internet Restored Notification
+    description: Notify when internet connection is restored
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.internet_connection
+        from: "off"
+        to: "on"
+        for:
+          seconds: 30
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "✅ Internet Connection Restored"
+          message: "Internet connection restored at {{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+    mode: single
